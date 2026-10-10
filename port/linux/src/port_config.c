@@ -295,6 +295,10 @@ static const struct config_setting config_settings[] =
 		"as CUSTOM SINGLEPLAYER and CUSTOM MULTIPLAYER. Their tags are checked\n"
 		"as the game's own maps' are before they run; false refuses them\n"
 		"(docs/custom_edition_caches.md)." },
+	{ "display.stencil_shadows", _config_boolean, "false", "HALO_STENCIL_SHADOWS", _environment_value, _platform_desktop,
+		"Hard stencil shadows from characters and vehicles besides the game's\n"
+		"own, as F.E.A.R. and Doom 3 cast them: on the level, on other objects\n"
+		"and on themselves, your own body's and weapon's in first person too." },
 
 	{ "paths.data", _config_string, "\"\"", "HALO_DATA_ROOT", _environment_value, _platform_desktop,
 		"The folder holding the game data's maps folder; empty looks in the\n"

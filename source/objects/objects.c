@@ -55,6 +55,8 @@ OBJECTS.C
 #include "units/units.h"
 /* port: object_bounds_cache.c's */
 void object_bounds_cache_update(long object_index, real_point3d const *center, real radius);
+#include "object_mesh.h" /* port: port/linux/game/object_mesh.c */
+void stencil_shadows_reset(void); /* port: port/linux/game/stencil_shadows.c */
 
 /* ---------- constants */
 
@@ -1069,6 +1071,10 @@ void objects_initialize_for_new_map(
 	widgets_initialize_for_new_map();
 	object_types_initialize_for_new_map();
 	lights_initialize_for_new_map();
+	/* port: the last map's meshes and shadow volumes forgotten
+	(port/linux/game/object_mesh.c, stencil_shadows.c) */
+	object_mesh_reset();
+	stencil_shadows_reset();
 	
 	data_make_valid(object_header_data);
 	object_name_list_clear();

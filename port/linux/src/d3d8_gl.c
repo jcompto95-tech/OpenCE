@@ -4696,6 +4696,103 @@ void WINAPI D3DDevice_End(void)
 	gl_check_errors("immediate draw");
 }
 
+/* port: a triangle list of positions alone (three floats each), drawn with
+the state as it is set, as immediate mode would draw it with no other
+attribute: the stencil shadows' volumes (port/linux/game/stencil_shadows.c),
+tens of thousands of vertices a frame, without immediate mode's copy of
+every attribute for each */
+static void set_attribute(INT reg, float a, float b, float c, float d);
+
+void d3d8_gl_draw_positions(const float *positions, unsigned long vertex_count, int again)
+{
+#ifdef HALO_GLES
+	unsigned long index;
+
+	(void)again;
+	D3DDevice_Begin(D3DPT_TRIANGLELIST);
+	for (index = 0; index < vertex_count; index++)
+		set_attribute(0, positions[index * 3], positions[index * 3 + 1], positions[index * 3 + 2], 1.0f);
+	D3DDevice_End();
+#else
+	static struct vertex_array_entry *positions_array;
+	static unsigned long last_offset;
+	static unsigned long last_count;
+	unsigned long offset;
+
+	if (!vertex_count || !positions || !prepare_draw(TRUE))
+		return;
+	/* (again: the same positions, as uploaded for the draw before) */
+	if (again && last_count == vertex_count)
+		offset = last_offset;
+	else
+		offset = stream_upload(positions, vertex_count * 3 * sizeof(float));
+	last_offset = offset;
+	last_count = vertex_count;
+	if (!positions_array)
+	{
+		struct vertex_layout layout;
+
+		memset(&layout, 0, sizeof(layout));
+		layout_attribute(&layout, 0, 0, 3, GL_FLOAT, GL_FALSE, FALSE, 0);
+		positions_array = vertex_array_get(&layout);
+	}
+	state_vertex_array(positions_array);
+	state_vertex_buffer(0, device.stream_buffer, offset, (GLsizei)(3 * sizeof(float)));
+	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)vertex_count);
+	gl_check_errors("positions draw");
+#endif
+}
+
+/* port/linux/game/stencil_shadows.c: shadow volumes into the stencil buffer
+in one draw, both faces at once (two-sided stencil): "depth fail" (zfail
+TRUE: back faces count up where hidden, front faces down) or "depth pass"
+(front faces count up where seen, back faces down). The state is the game's
+as set (cull mode none, stencil on), only the faces' operations are this
+draw's own, and put back after. */
+void d3d8_gl_draw_shadow_volume(const float *positions, unsigned long vertex_count, int zfail)
+{
+#ifdef HALO_GLES
+	(void)positions;
+	(void)vertex_count;
+	(void)zfail;
+#else
+	static struct vertex_array_entry *volume_array;
+	unsigned long offset;
+
+	if (!vertex_count || !positions || !prepare_draw(TRUE))
+		return;
+	offset = stream_upload(positions, vertex_count * 3 * sizeof(float));
+	if (!volume_array)
+	{
+		struct vertex_layout layout;
+
+		memset(&layout, 0, sizeof(layout));
+		layout_attribute(&layout, 0, 0, 3, GL_FLOAT, GL_FALSE, FALSE, 0);
+		volume_array = vertex_array_get(&layout);
+	}
+	state_vertex_array(volume_array);
+	state_vertex_buffer(0, device.stream_buffer, offset, (GLsizei)(3 * sizeof(float)));
+	glFrontFace(GL_CCW);
+	if (zfail)
+	{
+		glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_DECR_WRAP, GL_KEEP);
+		glStencilOpSeparate(GL_BACK, GL_KEEP, GL_INCR_WRAP, GL_KEEP);
+	}
+	else
+	{
+		glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_KEEP, GL_INCR_WRAP);
+		glStencilOpSeparate(GL_BACK, GL_KEEP, GL_KEEP, GL_DECR_WRAP);
+	}
+	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)vertex_count);
+	/* (as the state cache has them) */
+	glFrontFace(gl_state.front_face ? gl_state.front_face : GL_CCW);
+	glStencilOp(gl_state.stencil_operations[0] ? gl_state.stencil_operations[0] : GL_KEEP,
+		gl_state.stencil_operations[1] ? gl_state.stencil_operations[1] : GL_KEEP,
+		gl_state.stencil_operations[2] ? gl_state.stencil_operations[2] : GL_KEEP);
+	gl_check_errors("shadow volume draw");
+#endif
+}
+
 static void set_attribute(INT reg, float a, float b, float c, float d)
 {
 	BOOL emit = FALSE;

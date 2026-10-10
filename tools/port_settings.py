@@ -81,6 +81,9 @@ SCREENS = {
              [("128", "128"), ("256", "256"), ("512", "512"), ("1024", "1024")],
              "The size objects' shadows are drawn at: 128 as on\nthe Xbox; larger for smoother, as soft, edges.",
              None),
+            ("STENCIL SHADOWS:", "display.stencil_shadows", ON_OFF,
+             "Hard shadows from characters and vehicles on\nthe level and each other, F.E.A.R. style.",
+             "desktop"),
             ("PER-PIXEL LIGHTING:", "display.per_pixel_lighting", ON_OFF,
              "Light models for each pixel, without the facets\nof the Xbox's lighting for each vertex.", None),
         ],
@@ -181,7 +184,7 @@ SCREENS = {
 # pending edits, Defaults, OK and Cancel as the other settings screens.
 _video = SCREENS["video_settings"]
 _graphics = {"display.high_res_hud", "display.high_res_text", "display.anti_aliasing",
-             "display.shadow_resolution", "display.per_pixel_lighting"}
+             "display.shadow_resolution", "display.stencil_shadows", "display.per_pixel_lighting"}
 SCREENS["video_settings/graphics"] = {
     "screen": "graphics_settings_screen", "header": _video["header"], "spacing": 30,
     "same_place": ["anti_aliasing_android"],

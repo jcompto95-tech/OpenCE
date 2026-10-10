@@ -372,6 +372,14 @@ void render_objects(
 	return;
 }
 
+/* port: the objects drawn this frame (port/linux/game/stencil_shadows.c) */
+short render_objects_rendered(
+	long const **object_indices)
+{
+	*object_indices = render_object_globals.rendered_object_indices;
+	return render_object_globals.rendered_object_count;
+}
+
 void render_object_shadows(
 	void)
 {

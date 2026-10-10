@@ -89,6 +89,7 @@ symbols in this file:
 #include "structures/structures.h"
 /* port: static transparent part links for the newly loaded model tags. */
 #include "models/models.h"
+void stencil_shadows_render(void); /* port: port/linux/game/stencil_shadows.c */
 
 /* ---------- constants */
 
@@ -410,6 +411,7 @@ static void render_window(
 		structure_render_detail_objects();
 		rasterizer_transparent_geometry_draw(FALSE);
 		rasterizer_transparent_geometry_stop();
+		stencil_shadows_render(); /* port: port/linux/game/stencil_shadows.c (display.stencil_shadows) */
 		structure_render_fog_screen();
 		rasterizer_lens_flares_draw();
 		/* port: the 3D view antialiased (display.anti_aliasing), before the
