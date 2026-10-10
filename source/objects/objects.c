@@ -4071,6 +4071,29 @@ void object_delete_immediately(
 	return;
 }
 
+/* port: game.corpse_limit (port/linux/src/port_config.c): "insane", eight
+times the active garbage (the dead, dropped weapons) the game keeps about
+before collecting what no player sees; running short of objects or object
+memory still collects as ever */
+const char *config_string(const char *name);
+unsigned long config_changes(void);
+
+static long corpse_limit_scale(
+	void)
+{
+	static unsigned long changes = (unsigned long)-1;
+	static long scale = 1;
+
+	if (changes != config_changes())
+	{
+		const char *value = config_string("game.corpse_limit");
+
+		changes = config_changes();
+		scale = value && !strcmp(value, "insane") ? 8 : 1;
+	}
+	return scale;
+}
+
 /* the active garbage limits are per 16 players: a session of up to 128
 keeps proportionally more garbage around, campaign and smaller games the
 Xbox's amount */
@@ -4079,7 +4102,7 @@ static long active_garbage_limit(
 {
 	long player_count = player_data ? player_data->actual_count : 0;
 
-	return limit_per_16_players * MAX(16, player_count) / 16;
+	return limit_per_16_players * MAX(16, player_count) / 16 * corpse_limit_scale();
 }
 
 /* port: whether a collection of active garbage may be tried

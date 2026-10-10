@@ -83,6 +83,9 @@ SCREENS = {
              None),
             ("PER-PIXEL LIGHTING:", "display.per_pixel_lighting", ON_OFF,
              "Light models for each pixel, without the facets\nof the Xbox's lighting for each vertex.", None),
+            ("CORPSE LIMIT:", "game.corpse_limit", [("DEFAULT", "default"), ("INSANE", "insane")],
+             "How many bodies and dropped weapons stay\nabout. Default: the game's. Insane: 8x.",
+             None),
         ],
     },
     "mouse_settings": {
@@ -181,7 +184,8 @@ SCREENS = {
 # pending edits, Defaults, OK and Cancel as the other settings screens.
 _video = SCREENS["video_settings"]
 _graphics = {"display.high_res_hud", "display.high_res_text", "display.anti_aliasing",
-             "display.shadow_resolution", "display.per_pixel_lighting"}
+             "display.shadow_resolution", "display.per_pixel_lighting",
+             "game.corpse_limit"}
 SCREENS["video_settings/graphics"] = {
     "screen": "graphics_settings_screen", "header": _video["header"], "spacing": 30,
     "same_place": ["anti_aliasing_android"],
