@@ -192,7 +192,19 @@ _video["categories"] = [
     ("GRAPHICS:", "video_settings/graphics", "The HUD, text, anti-aliasing, shadows and\nlighting."),
     ("FOV AND VIEWMODELS:", "video_settings/fov_viewmodels",
      "The field of view and the first-person\nweapon. Their defaults keep the stock view."),
+    ("DEATH AND BLOOD:", "video_settings/death_blood", "Blood that paints vehicles and characters,\nand runs down walls."),
 ]
+SCREENS["video_settings/death_blood"] = {
+    "screen": "death_blood_settings_screen", "header": _video["header"], "spacing": 30,
+    "rows": [
+        ("BLOOD EFFECTS:", "game.blood_effects", [("CLASSIC", "classic"), ("DYNAMIC", "dynamic")],
+         "Dynamic: blood paints vehicles and objects, and\nruns down walls. Classic: the game's own.",
+         None),
+        ("BLOOD DRIPS:", "game.blood_drips", [("ANIMATED", "animated"), ("CLASSIC", "classic")],
+         "Animated: drops run down walls and vehicles, and\nfall from edges. Classic: the runs alone.",
+         None),
+    ],
+}
 SCREENS["video_settings/fov_viewmodels"] = {
     "screen": "fov_viewmodel_settings_screen", "header": _video["header"], "spacing": 30,
     "rows": [

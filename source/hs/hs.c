@@ -2844,6 +2844,7 @@ symbols in this file:
 #ifdef HALO_PROFILE
 #include "profile_console.h" /* port: port/linux/game/profile_console.c */
 #endif
+#include "blood.h" /* port: port/linux/game/blood.c */
 
 /* ---------- constants */
 
@@ -15392,6 +15393,16 @@ static boolean hs_compile_and_evaluate_command(
 			return network_votekick_player_named(name);
 		}
 	}
+#if BLOOD_EFFECTS
+	/* port: the blood effects' own command (`blood`, port/linux/game/blood.c):
+	how this machine draws blood, nothing of the game's */
+	{
+		long blood_result = blood_console_command(expression);
+
+		if (blood_result != NONE)
+			return (boolean)blood_result;
+	}
+#endif
 	/* port: playing in another's game, the host decides the game: no
 	cheats, no game speed, nothing else a command changes of the game (the
 	game run each tick also puts back what was changed before joining,

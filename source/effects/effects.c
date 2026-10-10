@@ -172,6 +172,7 @@ symbols in this file:
 #include "tag_files/tag_groups.h"
 #include "units/bipeds.h"
 #include "units/units.h"
+#include "blood.h" /* port: port/linux/game/blood.c */
 #undef real_local_random
 
 /* ---------- constants */
@@ -660,6 +661,9 @@ void effect_delete(
 {
 	struct effect_datum *effect = effect_try_and_get(effect_index);
 
+#if BLOOD_EFFECTS
+	blood_effect_deleted(effect_index); /* port: port/linux/game/blood.c */
+#endif
 	if (effect)
 	{
 		struct effect_definition *definition =
@@ -1545,7 +1549,12 @@ static long effect_allocate(
 				effect->local_player_index = NONE;
 				effect->header.flags = 0;
 
+#if BLOOD_EFFECTS
+				/* port: an ember plays one event of its effect alone (port/linux/game/blood.c) */
+				effect_set_event(effect_index, blood_effect_first_event(effect_index, effect));
+#else
 				effect_set_event(effect_index, 0);
+#endif
 			}
 		}
 	}
@@ -2163,6 +2172,25 @@ static void effect_generate_particles(
 					data.dont_draw_third_person =
 						particles->camera_mode == _effect_camera_mode_first_person_only;
 
+#if BLOOD_EFFECTS
+					/* port: an ember's particles smaller, or recoloured (port/linux/game/blood.c) */
+					{
+						real_point3d origin = instance->matrix.position;
+						real_vector3d carried = *global_zero_vector3d;
+
+						if (data.object_index == NONE)
+						{
+							if (instance->node_designator != NONE)
+								matrix4x3_transform_point(effect_get_node_matrix(effect, instance->node_designator),
+									&instance->matrix.position, &origin);
+							carried.i = effect->velocity.i * 30.0f;
+							carried.j = effect->velocity.j * 30.0f;
+							carried.k = effect->velocity.k * 30.0f;
+						}
+						blood_effect_particle(effect, &origin, &carried, &data.position, &data.velocity,
+							&data.radius, &data.color.rgb);
+					}
+#endif
 					particle_new(&data);
 				}
 			}
@@ -2380,10 +2408,17 @@ static void effect_update(
 			while (next_event_index < definition->events.count &&
 				real_seed_random(
 					effect_get_random_seed(effect->definition_index)) <
+#if BLOOD_EFFECTS
+				blood_effect_event_skip(effect_index, next_event_index, (short)definition->events.count,
+#endif
 				TAG_BLOCK_GET_ELEMENT(
 					&definition->events,
 					next_event_index,
-					struct effect_event_definition)->skip_fraction)
+					struct effect_event_definition)->skip_fraction
+#if BLOOD_EFFECTS
+				)
+#endif
+				)
 			{
 				next_event_index++;
 			}

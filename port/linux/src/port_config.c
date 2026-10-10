@@ -295,6 +295,15 @@ static const struct config_setting config_settings[] =
 		"as CUSTOM SINGLEPLAYER and CUSTOM MULTIPLAYER. Their tags are checked\n"
 		"as the game's own maps' are before they run; false refuses them\n"
 		"(docs/custom_edition_caches.md)." },
+	{ "game.blood_effects", _config_string, "\"classic\"", "HALO_BLOOD_EFFECTS", _environment_value, _platform_all,
+		"Blood: \"classic\" (the game's own blood only) or \"dynamic\" (blood\n"
+		"paints vehicles and characters as it does the level, and runs down\n"
+		"walls). How this machine draws blood: nothing sent between machines\n"
+		"changes." },
+	{ "game.blood_drips", _config_string, "\"animated\"", "HALO_BLOOD_DRIPS", _environment_value, _platform_all,
+		"Blood running down walls and vehicles, with blood effects dynamic:\n"
+		"\"animated\" (a drop leads each run, and drops fall from edges and\n"
+		"undersides) or \"classic\" (the runs alone)." },
 
 	{ "paths.data", _config_string, "\"\"", "HALO_DATA_ROOT", _environment_value, _platform_desktop,
 		"The folder holding the game data's maps folder; empty looks in the\n"

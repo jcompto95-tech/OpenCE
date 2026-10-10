@@ -339,6 +339,8 @@ the setting for one start of the game. It has priority over the file.
 | `display.fov` | `0.0` | `HALO_FOV` | The first-person view's field of view on foot, in degrees across at 16:9, from 20 to 150. `0`: the stock view. Refer to "Field of view". |
 | `display.viewmodel_fov` | `0.0` | `HALO_VIEWMODEL_FOV` | The first-person weapon's and hands' field of view, in degrees across at 16:9, from 20 to 150. `0`: the weapon's stock view, also when `display.fov` widens the world. Refer to "Field of view". |
 | `display.viewmodel_visible` | `true` | `HALO_VIEWMODEL_VISIBLE` | `true`: the first-person weapon, hands and what is attached to them are drawn. `false`: they are not; firing, animation, sound and lights go on, and other players' models are drawn. |
+| `game.blood_effects` | `classic` | `HALO_BLOOD_EFFECTS` | `classic`: the game's own blood. `dynamic`: blood also paints vehicles, characters and objects as it paints the level, riding with them; blood on walls, vehicles and characters runs down them; bodies run over bleed onto the vehicle by its speed; plasma that strikes a vehicle leaves sparks and smoke there. How this machine draws blood: nothing sent between machines changes. Refer to "Dynamic blood". |
+| `game.blood_drips` | `animated` | `HALO_BLOOD_DRIPS` | With `game.blood_effects` `dynamic`: `animated` (a drop leads each run down a wall or vehicle, and drops fall from edges and undersides) or `classic` (the runs alone). |
 | `display.high_res_hud` | `true` | `HALO_HIGH_RES_HUD` | `true`: the HUD (meters, counters, panels and their outlines, the motion sensor, reticles, waypoints, scopes) is drawn from the high-res assets in `port/assets/hud`, 8x the size of the maps' bitmaps. The bitmaps with English text keep the maps' own. `false`: the maps' own bitmaps. |
 | `display.high_res_text` | `true` | `HALO_HIGH_RES_TEXT` | `true`: the menus' and HUD's text is drawn with the fonts in `port/assets/fonts` (Overpass, in place of the maps' Interstate) at the resolution the game draws at, laid out as before; the menus' titles are drawn from the high-res pictures in `port/assets/titles`, and the controller button icons from those in `port/assets/buttons`. `false`: the maps' bitmap fonts, titles and button icons. |
 | `display.shadow_resolution` | `128` | `HALO_SHADOW_RESOLUTION` | The size of the maps that the shadows of the objects are drawn in, in pixels each way: `128`, `256`, `512` or `1024` (other values go down to one of these). The game draws the shadow of each object into a map of 128x128 pixels, blurs it and projects it onto the ground. On a large screen, the edges of these shadows show steps that move when the object moves. A larger map makes the edges smooth; the blur is made wider to match, so the shadows are as soft as on the Xbox. Each doubling adds two passes of the blur. `128`: as on the Xbox. |
@@ -504,6 +506,27 @@ keeps the stock view. `config.toml` takes any angle from 20 to 150.
 
 Only this machine's view changes. Nothing the machines send each other
 changes, so players with different settings play together.
+
+## Dynamic blood
+
+Video Setup's DEATH AND BLOOD screen turns on dynamic blood
+(`game.blood_effects`, `port/linux/game/blood.c`). The game's blood is laid
+as it is; besides it:
+
+- A decal meant for an object (blood, a bullet hole, a scorch) paints the
+  object's drawn model where it strikes (`object_mesh.c` reads the model's
+  triangles from the buffers the game draws), clipped to its triangles and
+  moved with it as it is drawn. Characters keep blood on their armor, but
+  your own body in first person does not.
+- Blood on walls, vehicles and characters runs down them, as streaks laid
+  over a few seconds; with BLOOD DRIPS animated, a drop leads each run and
+  drops fall from edges and undersides (`blood_drops.c`).
+- A body run over bleeds onto the vehicle as hard as it was hit; plasma
+  that strikes a vehicle leaves sparks and smoke where it hit.
+- Blood lands on two-sided surfaces too (trees, fences).
+- The decals stay within the game's decal limit; blood on vehicles is kept
+  over older bullet holes. The console command `blood` sets and shows its
+  tuning.
 
 ## System link
 
@@ -1046,6 +1069,7 @@ Other changes:
 | `render/render.c` | The 3D view of each window is antialiased before the HUD is drawn (`display.anti_aliasing`). |
 | `interface/hud.c` | In multiplayer, players' names are drawn above their heads (`display.player_names`, `display.player_name_scale`). |
 | `rasterizer/rasterizer_text.c`, `text/draw_string.c` | Text is drawn from an atlas of the fonts' glyphs, rasterized at the resolution the game draws at (`src/text_hires.c`), when the font has every character of the string. Text can be drawn scaled about a point (`rasterizer_text_set_scale`), as the players' names are. Each glyph's advance is centred on the font tag character's, so the layout is the same, and a glyph is cut at a text box only where the font tag's character visibly was. |
+| `effects/decals.c`, `effects/effects.c`, `effects/particles.c`, `effects/particle_systems.c`, `items/projectiles.c`, `objects/damage.c`, `render/render.c`, `render/render_particles.c`, `rasterizer/xbox/rasterizer_xbox_decals.c`, `hs/hs.c`, `objects/objects.c` | Dynamic blood (`game.blood_effects`, `blood.c`): decals painted onto objects' drawn models and moved with them, blood that runs and drips, hits and effects passed to it, its drops drawn with the particles, the `blood` console command; the meshes `object_mesh.c` read are forgotten on a new map. |
 
 The x86 inline assembly of the game is replaced by C. Thus the compiler
 can optimize that code for each processor:
