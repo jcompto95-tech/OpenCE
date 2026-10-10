@@ -459,6 +459,8 @@ static long decal_insert(
 	short layer,
 	long next_decal_index,
 	boolean permanent);
+/* port: game.decal_duration (rasterizer_xbox_decals.c) */
+boolean rasterizer_decals_last(real lifetime);
 /* port: whether a collision edge's vertices (from the map) are the bsp's */
 static boolean decal_collision_edge_vertices_valid(
 	struct collision_bsp const *collision_bsp,
@@ -2358,7 +2360,10 @@ static void decal_update(
 
 	decal->intensity = 255;
 
-	if (!TEST_FLAG(decal->flags, _decal_permanent_bit))
+	/* port: with game.decal_duration "extended", a lasting mark does not fade
+	with age: it lasts until the limit makes the oldest give way
+	(rasterizer_xbox_decals.c) */
+	if (!TEST_FLAG(decal->flags, _decal_permanent_bit) && !rasterizer_decals_last(decal->lifetime))
 	{
 		if (decal->lifetime == 0.0f || elapsed < decal->lifetime)
 		{

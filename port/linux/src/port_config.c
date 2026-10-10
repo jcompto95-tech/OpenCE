@@ -295,6 +295,10 @@ static const struct config_setting config_settings[] =
 		"as CUSTOM SINGLEPLAYER and CUSTOM MULTIPLAYER. Their tags are checked\n"
 		"as the game's own maps' are before they run; false refuses them\n"
 		"(docs/custom_edition_caches.md)." },
+	{ "game.decal_duration", _config_string, "\"default\"", "HALO_DECAL_DURATION", _environment_value, _platform_all,
+		"How long marks the game keeps for minutes (bullet holes, scorch marks,\n"
+		"blood) last: \"default\" (the game's own, about three minutes, then they\n"
+		"fade) or \"extended\" (until the decal limit retires the oldest)." },
 
 	{ "paths.data", _config_string, "\"\"", "HALO_DATA_ROOT", _environment_value, _platform_desktop,
 		"The folder holding the game data's maps folder; empty looks in the\n"

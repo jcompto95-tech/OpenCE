@@ -451,6 +451,29 @@ void _rasterizer_decals_dispose(
 	return;
 }
 
+/* port: game.decal_duration (port/linux/src/port_config.c) "extended":
+marks the game keeps for minutes (bullet holes, scorch marks, blood: three)
+never fade with age, and last until the decal limit makes the oldest give
+way; the brief ones (a plasma burn's glow) as ever */
+const char *config_string(const char *name);
+unsigned long config_changes(void);
+
+boolean rasterizer_decals_last(
+	real lifetime)
+{
+	static unsigned long changes = (unsigned long)-1;
+	static boolean extended = FALSE;
+
+	if (changes != config_changes())
+	{
+		const char *duration = config_string("game.decal_duration");
+
+		changes = config_changes();
+		extended = duration && !strcmp(duration, "extended");
+	}
+	return extended && lifetime >= 30.f;
+}
+
 long _rasterizer_decal_vertices_new(
 	long cache_size)
 {
