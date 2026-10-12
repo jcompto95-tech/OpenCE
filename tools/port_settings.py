@@ -94,6 +94,8 @@ SCREENS = {
              "Light Show: the shield glow three times as far,\nat full from a third of the flare.", None),
             ("DYNAMIC BLOOD:", "game.dynamic_blood", ON_OFF,
              "Blood stains vehicles and runs down walls and\nvehicles. Off: the game's own blood.", None),
+            ("PROJECTILE EFFECTS:", "game.projectile_effects", ON_OFF,
+             "Bullet holes and burns on vehicles, Spartans and\nmore; plasma sparks and smoke where it hits.", None),
         ],
     },
     "mouse_settings": {
@@ -198,7 +200,8 @@ SCREENS = {
 _video = SCREENS["video_settings"]
 _graphics = {"display.high_res_hud", "display.high_res_text", "display.anti_aliasing",
              "display.shadow_resolution", "display.per_pixel_lighting",
-             "display.shield_glow", "display.shield_glow_intensity", "game.dynamic_blood"}
+             "display.shield_glow", "display.shield_glow_intensity", "game.dynamic_blood",
+             "game.projectile_effects"}
 SCREENS["video_settings/graphics"] = {
     "screen": "graphics_settings_screen", "header": _video["header"], "spacing": 30,
     "same_place": ["anti_aliasing_android"],
@@ -206,7 +209,7 @@ SCREENS["video_settings/graphics"] = {
 }
 _video["rows"] = [row for row in _video["rows"] if row[1] not in _graphics]
 _video["categories"] = [
-    ("GRAPHICS:", "video_settings/graphics", "The HUD, text, anti-aliasing, shadows,\nlighting and blood."),
+    ("GRAPHICS:", "video_settings/graphics", "The HUD, text, anti-aliasing, shadows,\nlighting, blood and impacts."),
     ("FOV AND VIEWMODELS:", "video_settings/fov_viewmodels",
      "The field of view and the first-person\nweapon. Their defaults keep the stock view."),
 ]

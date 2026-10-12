@@ -141,6 +141,8 @@ symbols in this file:
 #include "sound/sound_definitions.h"
 #include "units/bipeds.h"
 #include "units/units.h"
+#include "blood.h" /* port: port/linux/game/blood.c */
+#include "plasma_embers.h" /* port: port/linux/game/plasma_embers.c */
 
 /* ---------- constants */
 
@@ -1235,6 +1237,90 @@ static void projectile_effect_new(
 	real scale,
 	real material_effect_scale)
 {
+#if BLOOD_EFFECTS
+	/* port: Projectile Effects (port/linux/game/blood.c, plasma_embers.c): its
+	bullet hole or burn painted onto the object it struck, as onto the level (a
+	plain hole: never the bloody variant a material's impact may carry; if its
+	impact has none, the projectile's metal or stone one). On a Spartan's bare
+	armor, shields down, the metal one: a dent or a burn, moving with him,
+	never on his visor. Plasma leaves sparks and smoke on a vehicle or on bare
+	armor */
+	if (collision->type == _collision_result_object && blood_marks_allowed() &&
+		object_try_and_get(collision->object_index))
+	{
+		static short const hard_materials[] = { _material_thin_metal, _material_hollow_metal, _material_thick_metal, _material_stone };
+		struct object_datum *object = object_try_and_get(collision->object_index);
+		struct projectile_definition const *definition = projectile_definition_get(projectile_get(projectile_index)->definition_index);
+		char const *projectile_name = tag_get_name(projectile_get(projectile_index)->definition_index);
+		char const *name = object->object.type == _object_type_biped ? tag_get_name(object->definition_index) : NULL;
+		/* (the material the shot's damage met: his shield's while it holds,
+		his armor's once it is down) */
+		short hit_material = projectile_get(projectile_index)->projectile.hit_material_type;
+		boolean armor = name && strstr(name, "cyborg") &&
+			hit_material != _material_cyborg_energy_shield && collision->material_type != _material_cyborg_energy_shield &&
+			(object->object.shield_vitality <= 0.f || hit_material == _material_cyborg);
+		/* (plasma: a plasma weapon's bolt, a Ghost's or Banshee's bolt, a
+		Wraith's mortar; not a grenade, not a fuel rod) */
+		boolean plasma = projectile_name &&
+			(strstr(projectile_name, "plasma") || strstr(projectile_name, "bolt") ||
+				strstr(projectile_name, "wraith") || strstr(projectile_name, "mortar")) &&
+			!strstr(projectile_name, "grenade") && !strstr(projectile_name, "fuel");
+		/* (blue: the plasma rifle's, a Ghost's, a Banshee's, a Wraith's;
+		green: the plasma pistol's, and its overcharged "charged bolt") */
+		boolean blue = projectile_name && !strstr(projectile_name, "plasma pistol") &&
+			!strstr(projectile_name, "charged bolt");
+		short painted = 0;
+		short index;
+
+		if (object->object.type != _object_type_biped)
+			blood_projectile_struck_object(&collision->point);
+		if (plasma)
+		{
+			long vehicle_index = collision->object_index;
+			short node_index = collision->node_index;
+
+			/* (a part of a vehicle: a Wraith's turret) */
+			if (object->object.type != _object_type_vehicle && object->object.parent_object_index != NONE &&
+				object_try_and_get(object_get_ultimate_parent(collision->object_index)) &&
+				object_get(object_get_ultimate_parent(collision->object_index))->object.type == _object_type_vehicle)
+			{
+				vehicle_index = object_get_ultimate_parent(collision->object_index);
+				node_index = 0;
+			}
+			if (object_get(vehicle_index)->object.type == _object_type_vehicle || armor)
+			{
+				plasma_embers_struck(vehicle_index, node_index, blue,
+					NUMBER_OF_EFFECT_MARKERS, marker_points, marker_forwards);
+			}
+		}
+		if (object->object.type != _object_type_biped || armor)
+		{
+			blood_allow_character_marks(armor);
+			if (!armor)
+			{
+				painted = blood_effect_onto_object(definition_index, collision->object_index, &collision->point,
+					&collision->plane.n, TRUE);
+			}
+			for (index = 0; definition && painted == 0 && index < (short)NUMBEROF(hard_materials); index++)
+			{
+				struct projectile_material_response_definition const *response;
+
+				if (!VALID_INDEX(hard_materials[index], definition->projectile.material_responses.count))
+					continue;
+				response = TAG_BLOCK_GET_ELEMENT(&definition->projectile.material_responses, hard_materials[index],
+					struct projectile_material_response_definition);
+				if (response->default_effect.index != NONE && response->default_effect.index != 0 &&
+					(armor || response->default_effect.index != definition_index))
+				{
+					painted = blood_effect_onto_object(response->default_effect.index, collision->object_index,
+						&collision->point, &collision->plane.n, TRUE);
+				}
+			}
+			blood_allow_character_marks(FALSE);
+		}
+	}
+#endif
+
 	if (collision->type == _collision_result_object)
 	{
 		effect_new_attached_from_markers(
