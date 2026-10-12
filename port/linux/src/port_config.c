@@ -320,6 +320,12 @@ static const struct config_setting config_settings[] =
 		"dropped weapons), painted on their drawn models and riding with them,\n"
 		"and runs down their sides (port/linux/game/blood.c). This machine's\n"
 		"alone: nothing is sent. false: the game's own blood." },
+	{ "game.projectile_effects", _config_boolean, "false", "HALO_PROJECTILE_EFFECTS", _environment_value, _platform_all,
+		"Bullet holes and plasma burns painted onto vehicles, objects, Spartans'\n"
+		"bare armor and two-sided surfaces (trees, fences), moving with what\n"
+		"they are on, and plasma's sparks and smoke lingering where a bolt\n"
+		"struck a vehicle or bare armor (blood.c, plasma_embers.c). This\n"
+		"machine's alone: nothing is sent. false: the game's own." },
 	{ "display.shield_glow", _config_boolean, "false", "HALO_SHIELD_GLOW", _environment_value, _platform_all,
 		"Energy shields light what is around them as they flare, as plasma\n"
 		"does, in the shield's own color." },

@@ -90,6 +90,22 @@ boolean blood_decal_on_two_sided(
 	long decal_definition_index);
 
 /* from projectiles.c: what a projectile struck, on the console (blood debug 1) */
+/* Projectile Effects (game.projectile_effects) on: bullet holes and burns
+painted onto objects, plasma's sparks and smoke (plasma_embers.c) */
+boolean blood_marks_allowed(
+	void);
+
+/* from projectiles.c: while set, an impact's marks go on characters too (a
+Spartan's bare armor) */
+void blood_allow_character_marks(
+	boolean allow);
+
+/* from projectiles.c: a projectile struck an object (not a character) here:
+the bloody bullet hole its impact may lay there is left out, its plain hole
+painted */
+void blood_projectile_struck_object(
+	real_point3d const *point);
+
 /* a local player's own unit, seen from inside it (first person): no marks
 on it drawn, they would cover the screen (blood_objects.c) */
 boolean blood_object_seen_first_person(

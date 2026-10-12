@@ -23,7 +23,9 @@ blood (each character's: its collision model's area damage effect,
   beside it, a spray) paints it, a body hit bleeds onto a vehicle behind
   it, and blood on a vehicle's side runs down it.
 
-Bullet holes and scorch marks are laid as the game lays them.
+Bullet holes and scorch marks are laid as the game lays them, unless
+Projectile Effects (game.projectile_effects) paints them onto objects too,
+with this module's painting of objects (and plasma_embers.c's sparks).
 
 Everything here is this machine's own (local random numbers, nothing over
 the network). Units: world units (1 = 3.048 m) and ticks (1/30 s).
@@ -47,6 +49,7 @@ the network). Units: world units (1 = 3.048 m) and ticks (1/30 s).
 
 #include "blood.h"
 #include "object_mesh.h"
+#include "plasma_embers.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -82,8 +85,14 @@ through, so what shows is narrower than the quad: BLOOD_RUN_WIDEN) */
 #define BLOOD_BEAD_CORE 0.9f
 #define BLOOD_RUN_WIDEN 1.6f
 /* (how square to the surface hit a triangle must face to take a mark's part:
-blood wraps round edges) */
-#define BLOOD_PAINT_MIN_FACING 0.35f
+blood wraps round edges, a hole or burn doesn't stretch over them) */
+static real blood_paint_min_facing = 0.35f;
+/* (projectiles.c: while set, marks go on characters too: a Spartan's bare
+armor) */
+static boolean blood_marks_on_characters = FALSE;
+/* (a mark on a character is smaller than on a wall: its decal is drawn for
+the level's scale) */
+#define BLOOD_CHARACTER_MARK_SCALE 0.35f
 
 /* how far either side of a decal's point its object surface is looked for */
 #define BLOOD_DECAL_SLACK 0.3f
@@ -128,7 +137,8 @@ struct blood_vehicle_decal
 	long object_index;
 	long creation_time;
 	short quad_count;
-	short pad;
+	boolean is_blood;
+	byte pad;
 	real_point3d corners[BLOOD_MAXIMUM_PAINT_QUADS * 4]; /* in their nodes' frames */
 	byte nodes[BLOOD_MAXIMUM_PAINT_QUADS * 4];
 };
@@ -411,6 +421,31 @@ static boolean blood_vehicle_allowed(void)
 		on = config_boolean("game.vehicle_blood") != 0;
 	}
 	return on && blood_parameters.enabled >= 0.5f && decals_enabled;
+}
+
+/* Video Settings' Projectile Effects (config.toml's game.projectile_effects,
+off by default): bullet holes and burns painted onto vehicles, objects,
+Spartans' bare armor and two-sided surfaces, and plasma's sparks and smoke
+on vehicles (plasma_embers.c) */
+boolean blood_marks_allowed(
+	void)
+{
+	static unsigned long changes = (unsigned long)-1;
+	static boolean on = FALSE;
+
+	if (changes != config_changes())
+	{
+		changes = config_changes();
+		on = config_boolean("game.projectile_effects") != 0;
+	}
+	return on && blood_parameters.enabled >= 0.5f && decals_enabled;
+}
+
+/* (a decal of the definition may be painted on objects now: blood by
+Vehicle Blood, any other mark by Projectile Effects) */
+static boolean blood_decal_allowed(long decal_definition_index)
+{
+	return blood_name_has(decal_definition_index, "blood") ? blood_vehicle_allowed() : blood_marks_allowed();
 }
 
 /* drops at a run's head and falling from edges and undersides */
@@ -970,7 +1005,7 @@ static boolean blood_paint_object(long decal_definition_index, long object_index
 		if (blood_triangle_normal(triangle, mesh, &facing) == 0.f)
 			continue;
 		scale_vector3d(&facing, sign, &facing);
-		if (blood_dot(&facing, normal) < BLOOD_PAINT_MIN_FACING)
+		if (blood_dot(&facing, normal) < blood_paint_min_facing)
 			continue;
 
 		count = blood_clip(polygon, count, clipped, 0, 1.f, -half_length);
@@ -1023,6 +1058,7 @@ static boolean blood_paint_object(long decal_definition_index, long object_index
 		entry->object_index = object_index;
 		entry->creation_time = game_time_get();
 		entry->quad_count = quad_count;
+		entry->is_blood = blood_name_has(decal_definition_index, "blood");
 		for (corner = 0; corner < quad_count * 4; corner++)
 		{
 			entry->nodes[corner] = nodes[corner];
@@ -1198,16 +1234,14 @@ void blood_render_update(
 
 	if (blood_violence_allowed() && blood_parameters.drips >= 0.5f)
 		blood_drips_render();
-	/* (Vehicle Blood turned off: the blood on objects goes, rather than stay
-	where it was as they move) */
-	if (!blood_vehicle_allowed())
+	/* (turned off: the blood or marks on objects go, rather than stay where
+	they were as they move) */
+	for (index = 0; blood_vehicle_decals && index < BLOOD_MAXIMUM_VEHICLE_DECALS; index++)
 	{
-		for (index = 0; blood_vehicle_decals && index < BLOOD_MAXIMUM_VEHICLE_DECALS; index++)
-		{
-			if (blood_vehicle_decals[index].decal_index != NONE)
-				blood_vehicle_decal_free(&blood_vehicle_decals[index], TRUE);
-		}
-		return;
+		struct blood_vehicle_decal *entry = &blood_vehicle_decals[index];
+
+		if (entry->decal_index != NONE && !(entry->is_blood ? blood_vehicle_allowed() : blood_marks_allowed()))
+			blood_vehicle_decal_free(entry, TRUE);
 	}
 	if (!blood_vehicle_decals)
 		return;
@@ -1865,6 +1899,7 @@ void blood_initialize_for_new_map(
 	blood_spots_reset();
 	blood_falling_drops_reset();
 	blood_skin_reset();
+	plasma_embers_initialize_for_new_map();
 }
 
 /* ---------- falling drops (purely drawn: blood_drops.c draws them) */
@@ -2048,6 +2083,7 @@ void blood_update(
 		for (index = 0; index < BLOOD_MAXIMUM_FALLING_DROPS; index++)
 			blood_falling_drops[index].active = FALSE;
 		blood_skin_reset();
+		plasma_embers_initialize_for_new_map();
 		blood_last_time = now - 1;
 	}
 	/* (each tick once: decals_update runs every frame drawn, several a tick) */
@@ -2055,6 +2091,7 @@ void blood_update(
 	if (steps <= 0)
 		return;
 	blood_last_time = now;
+	plasma_embers_update(now);
 	if (!blood_violence_allowed() && !blood_vehicle_allowed())
 		return;
 	for (steps = MIN(steps, 4); steps > 0; steps--)
@@ -2084,12 +2121,44 @@ enum { BLOOD_RECENT_SPOTS = 64 };
 static struct { long decal; long object_index; long time; real_point3d point; } blood_recent_spots[BLOOD_RECENT_SPOTS];
 static short blood_recent_spot_next = 0;
 
+/* where projectiles struck objects lately: the game's own impact effect
+there may lay a bloody bullet hole, which an object gets plain */
+enum { BLOOD_RECENT_IMPACTS = 16 };
+static struct { long time; real_point3d point; } blood_recent_impacts[BLOOD_RECENT_IMPACTS];
+static short blood_recent_impact_next = 0;
+
+void blood_projectile_struck_object(
+	real_point3d const *point)
+{
+	blood_recent_impacts[blood_recent_impact_next].time = game_time_get();
+	blood_recent_impacts[blood_recent_impact_next].point = *point;
+	blood_recent_impact_next = (short)((blood_recent_impact_next + 1) % BLOOD_RECENT_IMPACTS);
+}
+
+static boolean blood_near_recent_impact(real_point3d const *point)
+{
+	long now = game_time_get();
+	short index;
+
+	for (index = 0; index < BLOOD_RECENT_IMPACTS; index++)
+	{
+		if (blood_recent_impacts[index].time != NONE && now >= blood_recent_impacts[index].time &&
+			now - blood_recent_impacts[index].time <= 2 && distance3d(&blood_recent_impacts[index].point, point) < 0.3f)
+		{
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
 static void blood_spots_reset(void)
 {
 	short index;
 
 	for (index = 0; index < BLOOD_RECENT_SPOTS; index++)
 		blood_recent_spots[index].object_index = NONE;
+	for (index = 0; index < BLOOD_RECENT_IMPACTS; index++)
+		blood_recent_impacts[index].time = NONE;
 }
 
 static boolean blood_spot_recent(long decal, long object_index, real_point3d const *point, real radius)
@@ -2347,7 +2416,7 @@ short blood_decals_onto_object(
 	short index;
 	short painted = 0;
 
-	if (blood_laying || !blood_vehicle_allowed() || !point || !normal || !decals || count <= 0 ||
+	if (blood_laying || !(blood_vehicle_allowed() || blood_marks_allowed()) || !point || !normal || !decals || count <= 0 ||
 		!valid_real(point->x) || !valid_real(normal->i))
 	{
 		return 0;
@@ -2355,7 +2424,8 @@ short blood_decals_onto_object(
 	if (object_index != NONE)
 	{
 		object = object_try_and_get(object_index);
-		if (!object || !TEST_FLAG(BLOOD_PAINTED_OBJECTS, object->object.type))
+		if (!object || !(TEST_FLAG(BLOOD_PAINTED_OBJECTS, object->object.type) ||
+			(blood_marks_on_characters && object->object.type == _object_type_biped)))
 		{
 			return 0;
 		}
@@ -2373,7 +2443,7 @@ short blood_decals_onto_object(
 
 		blood_add(&from, &outward, BLOOD_DECAL_SLACK);
 		scale_vector3d(&ray, -2.f * BLOOD_DECAL_SLACK, &ray);
-		object_iterator_new(&iterator, BLOOD_PAINTED_OBJECTS, 0);
+		object_iterator_new(&iterator, BLOOD_PAINTED_OBJECTS | (blood_marks_on_characters ? _object_mask_biped : 0), 0);
 		while (object_iterator_next(&iterator))
 		{
 			real_point3d hit;
@@ -2398,15 +2468,19 @@ short blood_decals_onto_object(
 	for (index = 0; index < count; index++)
 	{
 		long decal = decals[index];
+		boolean is_blood = blood_name_has(decal, "blood");
 		real radius;
 
-		/* (blood only: bullet holes and scorches the game lays as ever) */
-		if (!blood_name_has(decal, "blood"))
+		/* (blood by Vehicle Blood, holes and scorches by Projectile Effects) */
+		if (!blood_decal_allowed(decal))
 			continue;
 		radius = decal_definition_radius(decal) * PIN(radius_modifiers ? radius_modifiers[index] : 1.f, 0.f, 4.f) *
-			real_local_random_range(0.85f, 1.f) * PIN(blood_parameters.amount, 0.f, 5.f);
-		if (object && object->object.type == _object_type_vehicle)
+			real_local_random_range(0.85f, 1.f) * (is_blood ? PIN(blood_parameters.amount, 0.f, 5.f) : 1.f);
+		if (is_blood && object && object->object.type == _object_type_vehicle)
 			radius *= BLOOD_ON_VEHICLES;
+		if (object && object->object.type == _object_type_biped)
+			radius *= BLOOD_CHARACTER_MARK_SCALE;
+		blood_paint_min_facing = object && object->object.type == _object_type_biped ? 0.8f : is_blood ? 0.35f : 0.65f;
 		if (radius <= 0.f)
 			continue;
 		if (blood_spot_recent(decal, best_object, &best_point, radius))
@@ -2419,20 +2493,30 @@ short blood_decals_onto_object(
 			struct object_mesh const *mesh = blood_object_skin(best_object);
 
 			painted++;
-			if (mesh && blood_parameters.drips >= 0.5f && fabs(best_normal.k) < BLOOD_STEEP)
+			if (is_blood && mesh && blood_parameters.drips >= 0.5f && fabs(best_normal.k) < BLOOD_STEEP)
 			{
 				blood_drip_start(decal, best_object, blood_triangle_node(mesh, best_triangle), best_triangle,
 					&best_point, &best_normal, radius, NONE);
 			}
 		}
 	}
+	blood_paint_min_facing = 0.35f;
 	return painted;
+}
+
+void blood_allow_character_marks(
+	boolean allow)
+{
+	blood_marks_on_characters = allow;
 }
 
 boolean blood_decal_on_two_sided(
 	long decal_definition_index)
 {
-	return blood_violence_allowed() && decal_definition_index != NONE && blood_name_has(decal_definition_index, "blood");
+	/* (blood by Dynamic Blood, bullet holes and burns by Projectile Effects:
+	every mark the level's other surfaces get) */
+	return decal_definition_index != NONE &&
+		(blood_name_has(decal_definition_index, "blood") ? blood_violence_allowed() : blood_marks_allowed());
 }
 
 boolean blood_decal_onto_object(
@@ -2450,7 +2534,7 @@ boolean blood_decal_onto_object(
 	real radius;
 	real_vector3d reach;
 
-	if (blood_laying || !blood_vehicle_allowed() || decal_definition_index == NONE || !origin || !vector ||
+	if (blood_laying || !(blood_vehicle_allowed() || blood_marks_allowed()) || decal_definition_index == NONE || !origin || !vector ||
 		!valid_real(vector->i) || blood_dot(vector, vector) < 1e-8f)
 	{
 		return FALSE;
@@ -2460,9 +2544,14 @@ boolean blood_decal_onto_object(
 		blood_checked_definition = decal_definition_index;
 		blood_checked_is_blood = blood_name_has(decal_definition_index, "blood");
 	}
-	/* (blood only: bullet holes and scorches the game lays as ever) */
-	if (!blood_checked_is_blood)
+	/* (blood by Vehicle Blood, holes and scorches by Projectile Effects;
+	without them, laid as the game lays them) */
+	if (blood_checked_is_blood ? !blood_vehicle_allowed() : !blood_marks_allowed())
 		return FALSE;
+	/* (a projectile's impact on an object: its hole plain, painted by
+	projectiles.c; the bloody variant its effect lays, nowhere) */
+	if (blood_checked_is_blood && blood_marks_allowed() && blood_near_recent_impact(origin))
+		return TRUE;
 
 	/* the object surface nearest the decal's point along its line, either way:
 	an impact's point is on the object's collision model, which its drawn
@@ -2537,10 +2626,13 @@ boolean blood_decal_onto_object(
 	}
 
 	radius = decal_definition_radius(decal_definition_index) * PIN(radius_modifier, 0.f, 4.f) *
-		real_local_random_range(0.85f, 1.f) * PIN(blood_parameters.amount, 0.f, 5.f);
+		real_local_random_range(0.85f, 1.f) * (blood_checked_is_blood ? PIN(blood_parameters.amount, 0.f, 5.f) : 1.f);
 	/* (blood clings to vehicles: heavier there) */
-	if (object_try_and_get(best_object) && object_try_and_get(best_object)->object.type == _object_type_vehicle)
+	if (blood_checked_is_blood && object_try_and_get(best_object) &&
+		object_try_and_get(best_object)->object.type == _object_type_vehicle)
+	{
 		radius *= BLOOD_ON_VEHICLES;
+	}
 	if (radius > 0.f && blood_spot_recent(decal_definition_index, best_object, &best_point, radius))
 		return TRUE;
 	if (radius <= 0.f ||
@@ -2551,7 +2643,7 @@ boolean blood_decal_onto_object(
 	{
 		struct object_mesh const *mesh = blood_object_skin(best_object);
 
-		if (mesh && blood_parameters.drips >= 0.5f && fabs(best_normal.k) < BLOOD_STEEP)
+		if (mesh && blood_checked_is_blood && blood_parameters.drips >= 0.5f && fabs(best_normal.k) < BLOOD_STEEP)
 		{
 			blood_drip_start(decal_definition_index, best_object, blood_triangle_node(mesh, best_triangle), best_triangle,
 				&best_point, &best_normal, radius, NONE);
