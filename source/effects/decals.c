@@ -2328,6 +2328,16 @@ void decal_new(
 				^ 0xdeadc0de;
 		}
 
+#if BLOOD_EFFECTS
+		/* port: blood meant for an object paints its drawn model, as it does
+		the level's surfaces (port/linux/game/blood.c) */
+		if (!permanent && !editor_geometry &&
+			blood_decal_onto_object(decal_definition_index, origin, velocity, radius_modifier))
+		{
+			return;
+		}
+#endif
+
 		match_assert("c:\\halo\\SOURCE\\effects\\decals.c", 1550,
 			global_current_collision_user_depth < MAXIMUM_COLLISION_USER_STACK_DEPTH);
 		global_current_collision_users[global_current_collision_user_depth++] =
@@ -2853,6 +2863,186 @@ boolean decal_move_quad(
 		decal_reinsert(decal_index, cluster_index, decal->layer);
 	}
 	return TRUE;
+}
+
+/* port: a decal of several quads the caller has laid on a surface (blood
+painted onto a vehicle's drawn model: port/linux/game/blood.c): positions, 4
+a quad (fans: 0 1 2 3 drawn as 0 1 2 and 0 2 3), and texture coordinates,
+0 to 1 across the decal's picture; moved after by decal_move_polygons */
+long decal_new_polygons(
+	long decal_definition_index,
+	real_point3d const *point,
+	short quad_count,
+	real_point3d const *positions,
+	real_point2d const *texcoords,
+	short cluster_index)
+{
+	struct decal_definition *definition;
+	struct bitmap_group *bitmap_group;
+	real_rectangle2d sprite_bounds = { 0.f, 1.f, 0.f, 1.f };
+	short sequence_index;
+	short bitmap_index = 0;
+	long cache_index;
+	long decal_index;
+	long cache_size;
+	struct decal_quad *quads;
+	long vertex_index;
+
+	if (!decals_enabled || decal_definition_index == NONE || quad_count <= 0 || quad_count > 64 ||
+		cluster_index < 0 || cluster_index >= MAXIMUM_CLUSTERS_PER_STRUCTURE)
+	{
+		return NONE;
+	}
+	definition = decal_definition_get(decal_definition_index);
+	if (!definition || definition->shader.map.index == NONE)
+		return NONE;
+	bitmap_group = bitmap_group_get(definition->shader.map.index);
+	if (!bitmap_group || bitmap_group->bitmaps.count <= 0 ||
+		definition->layer < 0 || definition->layer >= NUMBER_OF_DECAL_LAYERS)
+	{
+		return NONE;
+	}
+	sequence_index = bitmap_group->sequences.count > 0 ?
+		(short)PIN(local_random_range(0, (short)bitmap_group->sequences.count), 0, bitmap_group->sequences.count - 1) : 0;
+	if (bitmap_group->type == _bitmap_group_type_sprites && bitmap_group->sequences.count > 0)
+	{
+		struct bitmap_group_sequence *sequence = TAG_BLOCK_GET_ELEMENT(
+			&bitmap_group->sequences, sequence_index, struct bitmap_group_sequence);
+
+		if (sequence->sprites.count <= 0)
+			return NONE;
+		bitmap_index = TAG_BLOCK_GET_ELEMENT(&sequence->sprites, 0, struct bitmap_group_sprite)->bitmap_index;
+		sprite_bounds = TAG_BLOCK_GET_ELEMENT(&sequence->sprites, 0, struct bitmap_group_sprite)->bounds;
+	}
+
+	cache_size = quad_count * (long)sizeof(struct decal_quad);
+	cache_index = rasterizer_decal_vertices_new(cache_size);
+	if (cache_index == NONE)
+		return NONE;
+	decal_index = decal_insert(cache_index, cluster_index, definition->layer, NONE, FALSE);
+	if (decal_index == NONE)
+	{
+		rasterizer_decal_vertices_delete(cache_index);
+		return NONE;
+	}
+	decal_port_unlock(decal_index);
+	quads = rasterizer_decal_vertices_lock((short)cache_index, cache_size);
+	if (!quads)
+	{
+		decal_delete(decal_index);
+		rasterizer_decal_vertices_delete(cache_index);
+		return NONE;
+	}
+	for (vertex_index = 0; vertex_index < 4 * quad_count; vertex_index++)
+	{
+		struct decal_render_vertex *vertex = &quads[vertex_index / 4].vertices[vertex_index % 4];
+		real tu = PIN(sprite_bounds.x0 + (sprite_bounds.x1 - sprite_bounds.x0) * texcoords[vertex_index].x, 0.f, 1.f);
+		real tv = PIN(sprite_bounds.y0 + (sprite_bounds.y1 - sprite_bounds.y0) * texcoords[vertex_index].y, 0.f, 1.f);
+
+		vertex->position = positions[vertex_index];
+		vertex->texcoord[0] = (short)PIN((long)(tu * 32768.f + 0.5f), 0, 32767);
+		vertex->texcoord[1] = (short)PIN((long)(tv * 32768.f + 0.5f), 0, 32767);
+	}
+	rasterizer_decal_vertices_unlock();
+
+	{
+		struct decal_datum *decal = DECAL_GET(decal_index);
+		real intensity = decal_port_full_intensity ?
+			MAX(definition->intensity_lower_bound, definition->intensity_upper_bound) :
+			real_local_random_range(definition->intensity_lower_bound, definition->intensity_upper_bound);
+		real_rgb_color color;
+
+		rgb_colors_interpolate(
+			&color,
+			(definition->flags >> _decal_definition_color_interpolate_in_hsv_bit) & 3,
+			&definition->color_lower_bound,
+			&definition->color_upper_bound,
+			real_local_random_range(0.f, 1.f));
+		decal->position = *point;
+		decal->creation_time = game_time_get();
+		decal->sequence_index = (byte)sequence_index;
+		decal->sprite_index = 0;
+		decal->bitmap_index = (byte)bitmap_index;
+		decal->lifetime = real_local_random_range(definition->lifetime_lower_bound, definition->lifetime_upper_bound);
+		decal->decay_time = real_local_random_range(definition->decay_time_lower_bound, definition->decay_time_upper_bound);
+		decal->definition_index = decal_definition_index;
+		decal->quad_count = quad_count;
+		decal->color = real_a_rgb_color_to_pixel32(PIN(intensity, 0.f, 1.f), &color);
+		decal->intensity = 255;
+	}
+	return decal_index;
+}
+
+/* port: a decal_new_polygons decal's positions, moved (FALSE: it's gone) */
+boolean decal_move_polygons(
+	long decal_index,
+	long decal_definition_index,
+	short quad_count,
+	real_point3d const *positions,
+	real_point3d const *point,
+	short cluster_index)
+{
+	struct decal_datum *decal;
+	struct decal_quad *quads;
+	long vertex_index;
+
+	if (decal_index == NONE || !global_decal_data->valid)
+		return FALSE;
+	decal = (struct decal_datum *)datum_try_and_get(global_decal_data, decal_index);
+	if (!decal || decal->definition_index != decal_definition_index || decal->quad_count != quad_count)
+		return FALSE;
+	quads = rasterizer_decal_vertices_lock((short)decal_index, quad_count * (long)sizeof(struct decal_quad));
+	if (!quads)
+		return FALSE;
+	for (vertex_index = 0; vertex_index < 4 * quad_count; vertex_index++)
+		quads[vertex_index / 4].vertices[vertex_index % 4].position = positions[vertex_index];
+	rasterizer_decal_vertices_unlock();
+	/* (kept: moved with what it is on, it is in use) */
+	rasterizer_decal_vertices_touch(decal_index);
+	decal->position = *point;
+	if (cluster_index >= 0 && cluster_index < MAXIMUM_CLUSTERS_PER_STRUCTURE &&
+		decal->cluster_index != NONE && decal->cluster_index != cluster_index)
+	{
+		if (decal->next_decal_index != NONE)
+			DECAL_GET(decal->next_decal_index)->previous_decal_index = decal->previous_decal_index;
+		if (decal->previous_decal_index != NONE)
+			DECAL_GET(decal->previous_decal_index)->next_decal_index = decal->next_decal_index;
+		else
+			decal_set_first_decal_index(decal->cluster_index, decal->layer, decal->next_decal_index);
+		decal_reinsert(decal_index, cluster_index, decal->layer);
+	}
+	return TRUE;
+}
+
+/* port: a decal lasting at least so many seconds (blood on vehicles and
+characters, which the decals of the level's would otherwise outlast) */
+void decal_keep_at_least(
+	long decal_index,
+	real seconds)
+{
+	struct decal_datum *decal;
+
+	if (decal_index == NONE || !global_decal_data->valid)
+		return;
+	decal = (struct decal_datum *)datum_try_and_get(global_decal_data, decal_index);
+	if (decal && decal->lifetime > 0.f && decal->lifetime < seconds)
+		decal->lifetime = seconds;
+}
+
+/* port: deletes a decal_new_polygons decal */
+void decal_delete_polygons(
+	long decal_index,
+	long decal_definition_index)
+{
+	struct decal_datum *decal;
+
+	if (decal_index == NONE || !global_decal_data->valid)
+		return;
+	decal = (struct decal_datum *)datum_try_and_get(global_decal_data, decal_index);
+	if (!decal || decal->definition_index != decal_definition_index)
+		return;
+	decal_port_unlock(decal_index);
+	rasterizer_decal_vertices_delete(decal_index);
 }
 
 /* port: a decal definition's colour, the middle of its range (blood's drops,

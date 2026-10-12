@@ -94,6 +94,8 @@ SCREENS = {
              "Light Show: the shield glow three times as far,\nat full from a third of the flare.", None),
             ("DYNAMIC BLOOD:", "game.dynamic_blood", ON_OFF,
              "Hits throw blood on the walls behind, and it\nruns down them. Off: the game's own blood.", None),
+            ("VEHICLE BLOOD:", "game.vehicle_blood", ON_OFF,
+             "Blood stains vehicles and objects, riding with\nthem and running down them.", None),
         ],
     },
     "mouse_settings": {
@@ -198,7 +200,8 @@ SCREENS = {
 _video = SCREENS["video_settings"]
 _graphics = {"display.high_res_hud", "display.high_res_text", "display.anti_aliasing",
              "display.shadow_resolution", "display.per_pixel_lighting",
-             "display.shield_glow", "display.shield_glow_intensity", "game.dynamic_blood"}
+             "display.shield_glow", "display.shield_glow_intensity", "game.dynamic_blood",
+             "game.vehicle_blood"}
 SCREENS["video_settings/graphics"] = {
     "screen": "graphics_settings_screen", "header": _video["header"], "spacing": 30,
     "same_place": ["anti_aliasing_android"],
