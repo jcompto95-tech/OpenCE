@@ -165,6 +165,6 @@
 		<string text="Light Show: the shield glow three times as far,\nat full from a third of the flare."/>
 		<string text="Hits throw blood on the walls behind, and it\nruns down them. Off: the game's own blood."/>
 		<string text="Blood stains vehicles and objects, riding with\nthem and running down them."/>
-		<string text="Bullet holes and burns on vehicles, Spartans and\nmore; plasma sparks and smoke where it hits."/>
+		<string text="Bullet holes and burns on vehicles and Spartans;\nplasma sparks, smoke and light. Off: stock."/>
 	</strings>
 </menus>

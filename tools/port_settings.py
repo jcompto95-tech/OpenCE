@@ -97,7 +97,7 @@ SCREENS = {
             ("VEHICLE BLOOD:", "game.vehicle_blood", ON_OFF,
              "Blood stains vehicles and objects, riding with\nthem and running down them.", None),
             ("PROJECTILE EFFECTS:", "game.projectile_effects", ON_OFF,
-             "Bullet holes and burns on vehicles, Spartans and\nmore; plasma sparks and smoke where it hits.", None),
+             "Bullet holes and burns on vehicles and Spartans;\nplasma sparks, smoke and light. Off: stock.", None),
         ],
     },
     "mouse_settings": {

@@ -185,6 +185,9 @@ symbols in this file:
 #include "units/units.h"
 #include "cache/cache_files.h" /* port: (tag_iterator: light_port_glow_definition_get) */
 void shield_glow_update(void); /* port: port/linux/game/shield_glow.c */
+/* port: port/linux/game/projectile_lights.c */
+boolean projectile_lights_dynamic(long definition_index, long object_index);
+void projectile_lights_color(long object_index, real_rgb_color *color);
 
 /* port: port/linux/src (halo.log) */
 void platform_log(const char *format, ...);
@@ -857,8 +860,12 @@ long light_new(
 {
 	struct point_light_definition *definition = light_definition_get(definition_index);
 	long light_index = NONE;
+	/* port: a plasma projectile's or a needle's light lights the world too
+	(port/linux/game/projectile_lights.c) */
+	boolean dynamic = TEST_FLAG(definition->flags, _light_definition_dynamic_bit) ||
+		projectile_lights_dynamic(definition_index, object_index);
 
-	if (TEST_FLAG(definition->flags, _light_definition_dynamic_bit)
+	if (dynamic
 		|| definition->lens_flare.index != NONE)
 	{
 		light_index = datum_new(light_data);
@@ -902,8 +909,7 @@ long light_new(
 				}
 			}
 			light->flags = 0;
-			SET_FLAG(light->flags, _point_light_dynamic_bit,
-				TEST_FLAG(definition->flags, _light_definition_dynamic_bit));
+			SET_FLAG(light->flags, _point_light_dynamic_bit, dynamic); /* port: (projectile_lights.c) */
 			SET_FLAG(light->flags, _point_light_connects_to_map_bit,
 				TEST_FLAG(light->flags, _point_light_dynamic_bit)
 				|| definition->lens_flare.index != NONE);
@@ -1070,6 +1076,9 @@ void lights_preprocess_scene(
 				&definition->color_upper_bound,
 				color,
 				intensity);
+			/* port: a needle's light dimmer than a bolt's
+			(port/linux/game/projectile_lights.c) */
+			projectile_lights_color(light->object_index, &light->color);
 		}
 		else
 		{

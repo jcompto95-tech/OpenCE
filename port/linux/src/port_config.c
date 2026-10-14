@@ -324,8 +324,10 @@ static const struct config_setting config_settings[] =
 		"Bullet holes and plasma burns painted onto vehicles, objects, Spartans'\n"
 		"bare armor and two-sided surfaces (trees, fences), moving with what\n"
 		"they are on, and plasma's sparks and smoke lingering where a bolt\n"
-		"struck a vehicle or bare armor (blood.c, plasma_embers.c). This\n"
-		"machine's alone: nothing is sent. false: the game's own." },
+		"struck a vehicle or bare armor (blood.c, plasma_embers.c); plasma\n"
+		"bolts lighting the level and what they pass in their own color, needles\n"
+		"more dimly (projectile_lights.c). This machine's alone: nothing is\n"
+		"sent. false: the game's own." },
 	{ "display.shield_glow", _config_boolean, "false", "HALO_SHIELD_GLOW", _environment_value, _platform_all,
 		"Energy shields light what is around them as they flare, as plasma\n"
 		"does, in the shield's own color." },
