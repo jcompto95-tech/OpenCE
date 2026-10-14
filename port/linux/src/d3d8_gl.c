@@ -546,6 +546,9 @@ struct gl_device
 	unsigned long stream_offset;
 	GLuint index_buffer;
 	unsigned long index_offset;
+	/* port: the indices a quad list is drawn with, kept (quad_index_bind) */
+	GLuint quad_index_buffer;
+	unsigned long quad_index_quads;
 #ifdef HALO_WEB
 	/* (web_chunk_get) the room in the stream and index buffers, the draws
 	made so far, and the count at each buffer's latest write */
@@ -1685,6 +1688,9 @@ static void gl_initialize(void)
 		device.index_buffer = device.index_buffers[0];
 	}
 #endif
+	/* port: (quad_index_bind makes its own, for this context) */
+	device.quad_index_buffer = 0;
+	device.quad_index_quads = 0;
 #ifndef HALO_GLES
 	glGenBuffers(1, &device.stream_buffer);
 	glBindBuffer(GL_ARRAY_BUFFER, device.stream_buffer);
@@ -5025,6 +5031,70 @@ static GLenum primitive_mode(D3DPRIMITIVETYPE type)
 }
 
 /* quads become two triangles each */
+/* port: the indices of a quad list drawn straight from a stream are always
+the same pattern (0 1 2, 0 2 3, 4 5 6, ...), because setup_streams puts the
+first vertex of the draw at the beginning: one buffer of them, grown to the
+largest draw asked for and kept, in place of a list made, uploaded and
+thrown away for every draw. Decals are drawn a quad list at a time, hundreds
+of them a frame. FALSE: more quads than an unsigned short can index, and the
+caller makes its own list. */
+#define QUAD_INDEX_QUADS_MAXIMUM (0x10000 / 4)
+
+#ifdef HALO_WEB
+/* (the web's draws take their element buffer from the vertex array they are
+made with, by its own epoch: a buffer kept outside that is not its, so the
+indices are uploaded there as they were) */
+static boolean quad_index_bind(
+	unsigned long quads,
+	unsigned long *out_count)
+{
+	*out_count = quads * 6;
+	return FALSE;
+}
+#else
+static boolean quad_index_bind(
+	unsigned long quads,
+	unsigned long *out_count)
+{
+	*out_count = quads * 6;
+	if (!quads || quads > QUAD_INDEX_QUADS_MAXIMUM)
+		return FALSE;
+	if (!device.quad_index_buffer || device.quad_index_quads < quads)
+	{
+		unsigned long grown = device.quad_index_quads ? device.quad_index_quads * 2 : 256;
+		WORD *indices;
+		unsigned long quad;
+
+		if (grown < quads)
+			grown = quads;
+		if (grown > QUAD_INDEX_QUADS_MAXIMUM)
+			grown = QUAD_INDEX_QUADS_MAXIMUM;
+		indices = malloc(grown * 6 * sizeof(WORD));
+		if (!indices)
+			return FALSE;
+		for (quad = 0; quad < grown; quad++)
+		{
+			WORD first = (WORD)(quad * 4);
+
+			indices[quad * 6 + 0] = first;
+			indices[quad * 6 + 1] = (WORD)(first + 1);
+			indices[quad * 6 + 2] = (WORD)(first + 2);
+			indices[quad * 6 + 3] = first;
+			indices[quad * 6 + 4] = (WORD)(first + 2);
+			indices[quad * 6 + 5] = (WORD)(first + 3);
+		}
+		if (!device.quad_index_buffer)
+			glGenBuffers(1, &device.quad_index_buffer);
+		state_element_array_buffer(device.quad_index_buffer);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)(grown * 6 * sizeof(WORD)), indices, GL_STATIC_DRAW);
+		free(indices);
+		device.quad_index_quads = grown;
+	}
+	state_element_array_buffer(device.quad_index_buffer);
+	return TRUE;
+}
+#endif
+
 static WORD *quad_indices(const WORD *indices, unsigned long count, unsigned long *out_count)
 {
 	unsigned long quads = count / 4;
@@ -5072,11 +5142,20 @@ void WINAPI D3DDevice_DrawVertices(D3DPRIMITIVETYPE primitive_type, UINT start_v
 	if (primitive_type == D3DPT_QUADLIST)
 	{
 		unsigned long count;
-		WORD *indices = quad_indices(NULL, vertex_count, &count);
 
-		glDrawElements(GL_TRIANGLES, (GLsizei)count, GL_UNSIGNED_SHORT,
-			(const void *)index_upload(indices, count * sizeof(WORD)));
-		free(indices);
+		/* port: the indices kept, not made for this draw (quad_index_bind) */
+		if (quad_index_bind(vertex_count / 4, &count))
+		{
+			glDrawElements(GL_TRIANGLES, (GLsizei)count, GL_UNSIGNED_SHORT, (const void *)0);
+		}
+		else
+		{
+			WORD *indices = quad_indices(NULL, vertex_count, &count);
+
+			glDrawElements(GL_TRIANGLES, (GLsizei)count, GL_UNSIGNED_SHORT,
+				(const void *)index_upload(indices, count * sizeof(WORD)));
+			free(indices);
+		}
 	}
 	else
 	{

@@ -311,6 +311,12 @@ static const struct config_setting config_settings[] =
 	{ "display.first_person_legs", _config_boolean, "false", "HALO_FIRST_PERSON_LEGS", _environment_value, _platform_all,
 		"Your own legs in first person, seen looking down: your body as others\n"
 		"see it, drawn from the waist down, moving as it moves." },
+	{ "display.decals_on_gpu", _config_boolean, "true", "HALO_NO_GPU_DECALS", _environment_set_is_false, _platform_all,
+		"Decals (bullet holes, scorch marks, blood) drawn from the vertices they\n"
+		"were made with, each a draw of its own, as the Xbox drew them, instead\n"
+		"of their vertices being written again every frame. The picture is the\n"
+		"same; many decals cost a fraction of what they did. Off: the way the\n"
+		"port drew them before, for telling the two apart." },
 	{ "display.shield_glow", _config_boolean, "false", "HALO_SHIELD_GLOW", _environment_value, _platform_all,
 		"Energy shields light what is around them as they flare, as plasma\n"
 		"does, in the shield's own color." },

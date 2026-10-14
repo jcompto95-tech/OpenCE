@@ -309,6 +309,36 @@ static short decal_batch_count = 0;
 
 static void rasterizer_decals_draw_batch(void);
 
+/* port: the platform layer's (port/linux/src/port_config.c) */
+int config_boolean(const char *name);
+unsigned long config_changes(void);
+
+/* port: whether the decals are drawn from the stream their vertices are in,
+each decal a quad list of its own with its colour set before it, as the Xbox
+drew them (display.decals_on_gpu, "1"); otherwise they are batched
+(decal_batch) and their vertices written one attribute at a time.
+
+The batch was how the port first drew them, and it costs the processor dearly
+for what the graphics card does for nothing: every vertex of every decal in
+sight is read back out of the vertices, its three attributes written through
+the device one call each, and a whole vertex of attributes copied into the
+draw's own array, every frame. A thousand decals in sight is tens of
+thousands of calls and a megabyte copied for geometry that has not moved
+since it was made. Drawn from the stream, nothing of a decal is touched to
+draw it: the vertices are written once, when the decal is made. */
+static boolean rasterizer_decals_stream_drawn(void)
+{
+	static unsigned long changes = (unsigned long)-1;
+	static boolean drawn = TRUE;
+
+	if (changes != config_changes())
+	{
+		changes = config_changes();
+		drawn = config_boolean("display.decals_on_gpu") != 0;
+	}
+	return drawn;
+}
+
 /* port: the order the decals of a cluster are drawn in. Where it makes no
 difference (a run of decals whose blend functions commute: they do not
 write depth, and multiplying, adding, the least or the most of the
@@ -864,8 +894,24 @@ void _rasterizer_decals_draw(
 			"c:\\halo\\SOURCE\\rasterizer\\xbox\\rasterizer_xbox_decals.c",
 			511,
 			vertex_data_offset%sizeof(struct decal_vertex)==0);
-		/* port: batched (decal_batch), in place of
-		SetVertexData4ub(9, color) and DrawPrimitive(D3DPT_QUADLIST) */
+		/* port: drawn from the stream the decals' vertices are
+		(rasterizer_decals_stream_drawn), or batched (decal_batch) */
+		if (rasterizer_decals_stream_drawn())
+		{
+			IDirect3DDevice8_SetVertexData4ub(
+				global_d3d_device,
+				9,
+				(byte)(color >> 16),
+				(byte)(color >> 8),
+				(byte)color,
+				(byte)(PIXEL32_COMPONENT_MASK - intensity));
+			IDirect3DDevice8_DrawVertices(
+				global_d3d_device,
+				D3DPT_QUADLIST,
+				vertex_data_offset / sizeof(struct decal_vertex),
+				4 * decal->quad_count);
+		}
+		else
 		{
 			byte *vertex_data;
 
