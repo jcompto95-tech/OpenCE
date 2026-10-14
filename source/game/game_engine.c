@@ -4216,7 +4216,6 @@ static void game_engine_build_lighting(
 	void)
 {
 	long player_count = 0;
-	long object_count = 0;
 
 	{
 		struct data_iterator iterator;
@@ -4226,55 +4225,10 @@ static void game_engine_build_lighting(
 			player_count++;
 	}
 
-	if (global_variant.universal_variant.vehicle_set != _game_engine_vehicles_none)
-	{
-		if (global_variant.game_engine_index == game_engine_race)
-		{
-			struct scenario *scenario = global_scenario_get();
-			/* port: a long counter, for a map's long count */
-			long flag_index;
-
-			for (flag_index = 0;
-				flag_index < scenario->netgame_flags.count;
-				flag_index++)
-			{
-				struct scenario_netgame_flag *flag = TAG_BLOCK_GET_ELEMENT(
-					&scenario->netgame_flags,
-					flag_index,
-					struct scenario_netgame_flag);
-
-				if (flag->type == _netgame_flag_race_vehicle)
-					object_count++;
-			}
-
-			if (object_count > player_count)
-				object_count = player_count;
-		}
-		else
-		{
-			struct object_iterator object_iterator;
-
-			object_iterator_new(
-				&object_iterator,
-				_object_mask_vehicle,
-				0);
-			while (object_iterator_next(&object_iterator))
-				object_count++;
-		}
-	}
-
-	if ((player_count > 8 && object_count >= 2) ||
-		player_count >= 13)
-	{
-		SET_FLAG(game_engine_globals.flags, _game_engine_disable_dynamic_light_bit, TRUE);
-	}
-
-	if (player_count > 4 ||
-		object_count >= 4 ||
-		TEST_FLAG(game_engine_globals.flags, _game_engine_disable_dynamic_light_bit))
-	{
-		SET_FLAG(game_engine_globals.flags, _game_engine_disable_integrated_lights_bit, TRUE);
-	}
+	/* port: the Xbox turned dynamic lights off past 13 players, or past 8
+	with two vehicles, and the flashlight off past 4 players or 4 vehicles.
+	A match on a map with a few vehicles then had a flashlight, and the next
+	one did not. The beam is a dynamic light, so both stay on. */
 
 	if (player_count >= 5)
 		SET_FLAG(game_engine_globals.flags, _game_engine_5_or_more_players_bit, TRUE);
@@ -4662,8 +4616,108 @@ static struct
 	real_vector3d forward;
 	real_vector3d up;
 	long idle_since;
+	/* (the scenario name the map's scripts teleport; NONE when it had none) */
+	short name_index;
 } game_engine_vehicle_homes[MAXIMUM_VEHICLE_HOMES];
 static short game_engine_vehicle_home_count = NONE;
+
+/* still on the pad the map put it on: further than this, and empty, it can
+come back */
+#define VEHICLE_HOME_AWAY_SQUARED 4.0f
+
+/* whether nobody rides the vehicle: no driver or gunner, and no rider among
+its children (which hold its own weapons too) */
+static boolean game_engine_vehicle_empty(
+	struct unit_datum *vehicle)
+{
+	long child_index;
+
+	if (vehicle->unit.driver_object_index != NONE || vehicle->unit.gunner_object_index != NONE)
+		return FALSE;
+	for (child_index = vehicle->object.first_child_object_index; child_index != NONE;
+		child_index = object_get(child_index)->object.next_object_index)
+	{
+		if (object_get(child_index)->object.type == _object_type_biped)
+			return FALSE;
+	}
+	return TRUE;
+}
+
+/* a living vehicle of the home's kind on its pad, but except, that no other
+home follows (one a map's script put there in place of the home's: another
+home's vehicle parked there is still that home's), else NONE */
+static long game_engine_vehicle_home_on_pad(
+	short home,
+	long except)
+{
+	struct object_iterator iterator;
+
+	object_iterator_new(&iterator, _object_mask_vehicle, 0);
+	while (object_iterator_next(&iterator))
+	{
+		struct object_datum *object = object_get(iterator.index);
+		real dx = object->object.position.x - game_engine_vehicle_homes[home].position.x;
+		real dy = object->object.position.y - game_engine_vehicle_homes[home].position.y;
+		real dz = object->object.position.z - game_engine_vehicle_homes[home].position.z;
+		short other;
+
+		if (iterator.index == except || TEST_FLAG(object->object.damage_flags, _object_dead_bit) ||
+			object->definition_index != game_engine_vehicle_homes[home].definition_index ||
+			dx * dx + dy * dy + dz * dz > VEHICLE_HOME_AWAY_SQUARED)
+		{
+			continue;
+		}
+		for (other = 0; other < game_engine_vehicle_home_count; other++)
+		{
+			if (other != home && game_engine_vehicle_homes[other].object_index == iterator.index)
+				break;
+		}
+		if (other == game_engine_vehicle_home_count)
+			return iterator.index;
+	}
+	return NONE;
+}
+
+/* the home follows this vehicle, which keeps (or takes) the home's name */
+static void game_engine_vehicle_home_follow(
+	short home,
+	long object_index)
+{
+	game_engine_vehicle_homes[home].object_index = object_index;
+	if (game_engine_vehicle_homes[home].name_index == NONE)
+		game_engine_vehicle_homes[home].name_index = object_get(object_index)->object.name_index;
+	else
+		object_claim_scenario_name(object_index, game_engine_vehicle_homes[home].name_index);
+}
+
+/* the vehicle this home should follow. The recorded one, if it is still
+alive. A map script often destroys that one and creates it again under the
+same name, or in its place: that one is this home's vehicle, and a second is
+not put on the pad with it. */
+static long game_engine_vehicle_home_current(
+	short home)
+{
+	long object_index = game_engine_vehicle_homes[home].object_index;
+	struct unit_datum *vehicle = unit_try_and_get(object_index);
+	long named_index;
+
+	if (vehicle && !TEST_FLAG(vehicle->object.damage_flags, _object_dead_bit))
+		return object_index;
+
+	named_index = game_engine_vehicle_homes[home].name_index == NONE ? NONE :
+		object_index_from_name_index(game_engine_vehicle_homes[home].name_index);
+	vehicle = unit_try_and_get(named_index);
+	if (vehicle && !TEST_FLAG(vehicle->object.damage_flags, _object_dead_bit))
+	{
+		game_engine_vehicle_homes[home].object_index = named_index;
+		return named_index;
+	}
+
+	object_index = game_engine_vehicle_home_on_pad(home, NONE);
+	if (object_index != NONE)
+		game_engine_vehicle_home_follow(home, object_index);
+	return object_index;
+}
 
 static void game_engine_update_vehicle_respawn(
 	void)
@@ -4692,11 +4746,13 @@ static void game_engine_update_vehicle_respawn(
 			object_get_orientation(iterator.index, &game_engine_vehicle_homes[home].forward,
 				&game_engine_vehicle_homes[home].up);
 			game_engine_vehicle_homes[home].idle_since = NONE;
+			game_engine_vehicle_homes[home].name_index = object->object.name_index;
 		}
 	}
 	for (index = 0; index < game_engine_vehicle_home_count; index++)
 	{
-		struct unit_datum *vehicle = unit_try_and_get(game_engine_vehicle_homes[index].object_index);
+		long object_index = game_engine_vehicle_home_current(index);
+		struct unit_datum *vehicle = unit_try_and_get(object_index);
 		boolean waiting = TRUE;
 
 		if (vehicle && !TEST_FLAG(vehicle->object.damage_flags, _object_dead_bit))
@@ -4705,18 +4761,7 @@ static void game_engine_update_vehicle_respawn(
 			real dy = vehicle->object.position.y - game_engine_vehicle_homes[index].position.y;
 			real dz = vehicle->object.position.z - game_engine_vehicle_homes[index].position.z;
 
-			long child_index;
-
-			/* (empty: no rider among its children, which hold its own
-			weapons too) */
-			waiting = vehicle->unit.driver_object_index == NONE && vehicle->unit.gunner_object_index == NONE &&
-				dx * dx + dy * dy + dz * dz > 4.0f;
-			for (child_index = vehicle->object.first_child_object_index; waiting && child_index != NONE;
-				child_index = object_get(child_index)->object.next_object_index)
-			{
-				if (object_get(child_index)->object.type == _object_type_biped)
-					waiting = FALSE;
-			}
+			waiting = dx * dx + dy * dy + dz * dz > VEHICLE_HOME_AWAY_SQUARED && game_engine_vehicle_empty(vehicle);
 		}
 		if (!waiting)
 			game_engine_vehicle_homes[index].idle_since = NONE;
@@ -4725,14 +4770,42 @@ static void game_engine_update_vehicle_respawn(
 		else if (now - game_engine_vehicle_homes[index].idle_since >= respawn_ticks)
 		{
 			struct object_placement_data placement_data;
+			long stale_index = game_engine_vehicle_homes[index].object_index;
+			long named_index = game_engine_vehicle_homes[index].name_index == NONE ? NONE :
+				object_index_from_name_index(game_engine_vehicle_homes[index].name_index);
+			struct unit_datum *named = unit_try_and_get(named_index);
+			long on_pad = game_engine_vehicle_home_on_pad(index, object_index);
 
-			if (vehicle)
-				object_delete(game_engine_vehicle_homes[index].object_index);
+			/* (a vehicle under the home's name that someone rides is theirs:
+			the home follows it, and waits for it) */
+			if (named && named_index != stale_index && !TEST_FLAG(named->object.damage_flags, _object_dead_bit) &&
+				!game_engine_vehicle_empty(named))
+			{
+				game_engine_vehicle_homes[index].object_index = named_index;
+				game_engine_vehicle_homes[index].idle_since = NONE;
+				continue;
+			}
+			/* (the home's vehicle, empty or wrecked, goes; and the one under
+			its name, but for one on the pad, which it follows instead of a
+			new one: as many vehicles as before) */
+			if (unit_try_and_get(stale_index))
+				object_delete(stale_index);
+			if (named && named_index != stale_index && named_index != on_pad)
+				object_delete(named_index);
+			if (on_pad != NONE)
+			{
+				game_engine_vehicle_home_follow(index, on_pad);
+				game_engine_vehicle_homes[index].idle_since = NONE;
+				continue;
+			}
 			object_placement_data_new(&placement_data, game_engine_vehicle_homes[index].definition_index, NONE);
 			placement_data.position = game_engine_vehicle_homes[index].position;
 			placement_data.forward = game_engine_vehicle_homes[index].forward;
 			placement_data.up = game_engine_vehicle_homes[index].up;
 			game_engine_vehicle_homes[index].object_index = object_new(&placement_data);
+			object_claim_scenario_name(
+				game_engine_vehicle_homes[index].object_index,
+				game_engine_vehicle_homes[index].name_index);
 			game_engine_vehicle_homes[index].idle_since = NONE;
 		}
 	}

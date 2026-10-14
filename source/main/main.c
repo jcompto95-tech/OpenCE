@@ -381,9 +381,13 @@ symbols in this file:
 #include "networking/network_server_manager.h" /* port: a co-op game's level won */
 #include "network_coop.h" /* port: port/linux/game/network_coop.c */
 #include "network_voice.h" /* port: port/linux/game/network_voice.c */
+#include "map_share.h" /* port: port/linux/game/map_share.c */
 #include "profile_sections.h" /* port: port/linux/include/profile_sections.h */
 #ifdef HALO_PROFILE
 #include "profile_trace.h" /* port: port/linux/src/profile_trace.c */
+#endif
+#ifdef HALO_WEB
+#include <emscripten.h> /* port: the browser runs the main loop (port/web/README.md) */
 #endif
 #include "camera/director.h"
 #include "camera/observer.h"
@@ -3096,6 +3100,13 @@ void halt_and_catch_fire(
 	char label[96];
 	#endif
 
+#ifdef HALO_WEB
+	/* port: a browser shows only what a frame of its own main loop drew, and
+	this screen never returns to it: the game stops, and the page shows the
+	error from the log, where it already is (port/web/README.md) */
+	emscripten_cancel_main_loop();
+	abort();
+#endif
 	if (!global_screenshot_count.halt_recursion_lock)
 	{
 		scenario = global_scenario_try_and_get();
@@ -3345,11 +3356,30 @@ PROFILE_SECTION(main_non_deterministic_update_section, "non_deterministic_update
 PROFILE_SECTION(main_throttle_section, "throttle")
 PROFILE_SECTION(main_present_section, "present")
 
+#ifdef HALO_WEB
+/* port: in a browser, the page's frames call the main loop one iteration at a
+time, and what an iteration drew shows once it returns (port/web/README.md) */
+static boolean main_loop_iteration(void);
+
+static void main_loop_web_frame(
+	void)
+{
+	if (!main_loop_iteration())
+	{
+		emscripten_cancel_main_loop();
+		error(_error_silent, "end of saved film");
+		main_exit();
+	}
+}
+#endif
+
 void main_loop(
 	void)
 {
+#ifndef HALO_WEB
 	boolean render_frame;
 	long connection;
+#endif
 
 	if (!game_in_editor())
 	{
@@ -3368,7 +3398,20 @@ void main_loop(
 	main_setup_connection();
 	main_initialize_time();
 
+#ifdef HALO_WEB
+	emscripten_set_main_loop(main_loop_web_frame, 0, TRUE);
+}
+
+static boolean main_loop_iteration(
+	void)
+{
+	boolean render_frame;
+	long connection;
+
+	do
+#else
 	while (TRUE)
+#endif
 	{
 		if (!game_in_editor())
 		{
@@ -3477,6 +3520,8 @@ void main_loop(
 			network_test_update(main_globals.main_menu_scenario_loaded, main_globals.seconds_elapsed);
 			/* port: voice chat, in the lobby and in game (port/linux/game/network_voice.c) */
 			network_voice_update();
+			/* port: map sharing, in the lobby and in game (port/linux/game/map_share.c) */
+			map_share_update();
 			profile_scope_enter(main_network_start_frame_section)
 			connection = main_globals.connection;
 			if (connection==_game_connection_network_client)
@@ -3608,12 +3653,21 @@ void main_loop(
 			main_reset_time();
 			main_globals.halt_time_scale = TRUE;
 		}
+#ifdef HALO_WEB
+		return TRUE;
+#endif
 	}
+#ifdef HALO_WEB
+	while (FALSE);
+	/* (a film played to its end) */
+	return FALSE;
+#else
 
 	error(_error_silent, "end of saved film");
 	main_exit();
 
 	return;
+#endif
 }
 
 /* ---------- private code */
