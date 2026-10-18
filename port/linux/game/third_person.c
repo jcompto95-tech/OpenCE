@@ -152,6 +152,22 @@ void third_person_camera_update(
 	object_get_velocities(unit_index, &command->focus_velocity, NULL);
 }
 
+/* Freeze the action before it enters prediction, history and the network.
+The camera's desired angles remain local; every peer receives the same aim. */
+void third_person_action_facing(
+	short local_player_index,
+	real_euler_angles2d *desired_facing)
+{
+	if (local_player_index != 0 || !third_person_free_look || third_person_unit() == NONE)
+		return;
+	if (!third_person_frozen)
+	{
+		third_person_frozen = TRUE;
+		third_person_frozen_facing = *desired_facing;
+	}
+	*desired_facing = third_person_frozen_facing;
+}
+
 /* (players.c) the local player's control, as it goes to its unit: in free
 look, the facing and aim held, and the head turned to the camera's way */
 void third_person_control(
@@ -171,7 +187,7 @@ void third_person_control(
 	}
 	player_aiming_vector_from_facing(player_index, &held, &third_person_frozen_facing);
 	/* (the head: where the camera looks, the mouse's facing) */
-	control_data->looking_vector = control_data->aiming_vector;
+	player_control_get_facing_direction(0, &control_data->looking_vector);
 	control_data->facing_vector = held;
 	control_data->aiming_vector = held;
 }
