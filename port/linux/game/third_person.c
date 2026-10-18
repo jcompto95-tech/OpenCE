@@ -86,6 +86,16 @@ static long third_person_unit(
 
 /* ---------- public code */
 
+/* A camera switch can bypass the on-foot eligibility check (a scripted
+camera, for example). Release input without changing the user's toggle. */
+void third_person_camera_deactivate(
+	void)
+{
+	platform_third_person_active(FALSE);
+	third_person_free_look = FALSE;
+	third_person_frozen = FALSE;
+}
+
 /* (director.c, each frame) whether the local player's view is the
 third-person camera now, its key read */
 boolean third_person_camera_wanted(

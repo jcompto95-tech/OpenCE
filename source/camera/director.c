@@ -142,6 +142,7 @@ symbols in this file:
 boolean network_game_distributed_client(void);
 /* port: port/linux/game/third_person.c */
 boolean third_person_camera_wanted(short local_player_index);
+void third_person_camera_deactivate(void);
 void third_person_camera_update(void *camera, void *controls, void *result);
 
 /* ---------- constants */
@@ -422,6 +423,9 @@ static void director_set_camera(
 {
 	struct director *director = director_get(local_player_index);
 
+	/* port: scripted, dead and vehicle cameras no longer own third-person input. */
+	if (local_player_index == 0 && camera_proc != (director_camera_update_proc)third_person_camera_update)
+		third_person_camera_deactivate();
 	director->camera_proc = camera_proc;
 	director->debug_input_scale = 1.f;
 	director->debug_controls = FALSE;
@@ -630,7 +634,8 @@ static void director_choose_game_perspective(
 	following = director_desired_perspective(unit_index, &perspective);
 	/* port: on foot, the third-person camera when it is on
 	(port/linux/game/third_person.c) */
-	third_person = !following && third_person_camera_wanted(local_player_index);
+	/* port: refresh eligibility even when a vehicle selects a following camera. */
+	third_person = third_person_camera_wanted(local_player_index) && !following;
 	if (third_person &&
 		(force || director->camera_proc == (director_camera_update_proc)first_person_camera_update))
 	{
