@@ -855,10 +855,12 @@ static boolean director_update_controls(
 			last_ticks[local_player_index] = ticks;
 		}
 
+		/* port: the on-foot third-person view also uses normal player controls. */
 		if (director->camera_proc !=
 				(director_camera_update_proc)first_person_camera_update &&
 			director->camera_proc !=
-				(director_camera_update_proc)following_camera_update)
+				(director_camera_update_proc)following_camera_update &&
+			director->camera_proc != (director_camera_update_proc)third_person_camera_update)
 		{
 			if (gamepad->buttons[_gamepad_binary_button_right_thumb] == 1)
 				director->debug_controls = !director->debug_controls;
