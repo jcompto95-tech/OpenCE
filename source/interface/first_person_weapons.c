@@ -1876,8 +1876,9 @@ static void first_person_weapon_update(
 			first_person_weapon_next_state(local_player_index);
 		}
 
+		/* port: keep local reload and other animation sounds in on-foot third person. */
 		if (sound_definition_index!=NONE &&
-			director_get_perspective(local_player_index)==_director_perspective_first_person)
+			director_plays_first_person_weapon_sounds(local_player_index))
 		{
 			first_person_weapon->current_sound_index= object_impulse_sound_new(
 				first_person_weapon->weapon_index,

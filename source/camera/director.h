@@ -135,6 +135,9 @@ boolean director_inhibited_input(
 	short local_player_index);
 director_perspective director_get_perspective(
 	short local_player_index);
+/* port: local weapon animation sounds also accompany the on-foot camera. */
+boolean director_plays_first_person_weapon_sounds(
+	short local_player_index);
 short director_desired_perspective(
 	long unit_index,
 	director_perspective *perspective);

@@ -330,6 +330,15 @@ director_perspective director_get_perspective(
 	return camera->perspective;
 }
 
+/* port: use the active camera, without reading the third-person toggle again.
+Vehicle, death and scripted cameras retain the original sound policy. */
+boolean director_plays_first_person_weapon_sounds(
+	short local_player_index)
+{
+	return director_get_perspective(local_player_index)==_director_perspective_first_person ||
+		director_get(local_player_index)->camera_proc==third_person_camera_update;
+}
+
 short director_desired_perspective(
 	long unit_index,
 	director_perspective *perspective)
